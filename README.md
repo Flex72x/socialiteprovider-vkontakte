@@ -1,7 +1,7 @@
 # VKontakte
 
 ```bash
-composer require socialiteproviders/vkontakte
+composer require muscobytes/socialiteprovider-vkontakte
 ```
 
 ## Register an application 
