@@ -2,8 +2,10 @@
 
 namespace SocialiteProviders\VKontakte;
 
+use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\RequestOptions;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 use Laravel\Socialite\Two\InvalidStateException;
 use RuntimeException;
 use SocialiteProviders\Manager\OAuth2\AbstractProvider;
@@ -17,6 +19,8 @@ class Provider extends AbstractProvider
 
     protected $scopes = ['email'];
 
+    protected $usesPKCE = true;
+
     /**
      * Last API version.
      */
@@ -24,18 +28,19 @@ class Provider extends AbstractProvider
 
     protected function getAuthUrl($state): string
     {
-        return $this->buildAuthUrlFromBase('https://oauth.vk.com/authorize', $state);
+        return $this->buildAuthUrlFromBase('https://id.vk.com/authorize', $state);
     }
 
     protected function getTokenUrl(): string
     {
-        return 'https://oauth.vk.com/access_token';
+        return 'https://id.vk.com/oauth2/auth';
     }
 
     /**
      * {@inheritdoc}
+     * @throws GuzzleException
      */
-    protected function getUserByToken($token)
+    protected function getUserByToken($token): array
     {
         $formToken = [];
 
@@ -65,14 +70,27 @@ class Provider extends AbstractProvider
         return array_merge($formToken, $response['response'][0]);
     }
 
+    protected function getTokenHeaders($code): array
+    {
+        return [
+            'Content-Type' => 'application/x-www-form-urlencoded',
+        ];
+    }
+
     /**
      * {@inheritdoc}
+     * @throws GuzzleException
      */
     public function user()
     {
         if ($this->hasInvalidState()) {
             throw new InvalidStateException;
         }
+
+        $this->parameters = array_merge($this->parameters, [
+            'device_id' => $this->request->get('device_id'),
+            'state' => Str::random(64),
+        ]);
 
         $response = $this->getAccessTokenResponse($this->getCode());
 
