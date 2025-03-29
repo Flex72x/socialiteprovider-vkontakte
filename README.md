@@ -1,5 +1,7 @@
 # VKontakte
 
+This package fixes OAuth 2.1 with PKCE support for VKontakte Socialite provider.
+
 ```bash
 composer require muscobytes/socialiteprovider-vkontakte
 ```
