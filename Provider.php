@@ -5,6 +5,7 @@ namespace SocialiteProviders\VKontakte;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\RequestOptions;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Two\InvalidStateException;
 use RuntimeException;
@@ -42,32 +43,22 @@ class Provider extends AbstractProvider
      */
     protected function getUserByToken($token): array
     {
-        $formToken = [];
-
-        if (is_array($token)) {
-            $formToken['email'] = $token['email'] ?? null;
-
-            $token = $token['access_token'];
-        }
-
-        $response = $this->getHttpClient()->get('https://api.vk.com/method/users.get', [
-            RequestOptions::QUERY => [
-                'access_token' => $token,
-                'fields'       => implode(',', $this->fields),
-                'lang'         => $this->getConfig('lang', 'en'),
-                'v'            => self::VERSION,
+        $response = $this->getHttpClient()->post('https://id.vk.com/oauth2/user_info', [
+            RequestOptions::FORM_PARAMS => [
+                'client_id'     => $this->clientId,
+                'access_token'  => $token,
             ],
         ]);
 
         $response = json_decode((string) $response->getBody(), true);
 
-        if (! is_array($response) || ! isset($response['response'][0])) {
+        if (! is_array($response) || ! isset($response['user'])) {
             throw new RuntimeException(sprintf(
-                'Invalid JSON response from VK: %s', $response->getBody()
+                'Invalid JSON response from VK: %s', $response
             ));
         }
 
-        return array_merge($formToken, $response['response'][0]);
+        return $response['user'];
     }
 
     protected function getTokenHeaders($code): array
@@ -94,12 +85,13 @@ class Provider extends AbstractProvider
 
         $response = $this->getAccessTokenResponse($this->getCode());
 
-        $user = $this->mapUserToObject($this->getUserByToken($response));
+        $user = $this->mapUserToObject($this->getUserByToken($response['access_token']));
 
         $this->credentialsResponseBody = $response;
 
         if ($user instanceof User) {
             $user->setAccessTokenResponseBody($this->credentialsResponseBody);
+            $user->setRefreshToken($this->credentialsResponseBody['refresh_token']);
         }
 
         return $user->setToken($this->parseAccessToken($response))
@@ -112,11 +104,12 @@ class Provider extends AbstractProvider
     protected function mapUserToObject(array $user)
     {
         return (new User)->setRaw($user)->map([
-            'id'       => Arr::get($user, 'id'),
+            'id'       => Arr::get($user, 'user_id'),
             'nickname' => Arr::get($user, 'screen_name'),
             'name'     => trim(Arr::get($user, 'first_name').' '.Arr::get($user, 'last_name')),
             'email'    => Arr::get($user, 'email'),
-            'avatar'   => Arr::get($user, 'photo_200'),
+            'avatar'   => Arr::get($user, 'avatar'),
+            'birthday' => Carbon::createFromFormat('d.m.Y', Arr::get($user, 'birthday')),
         ]);
     }
 
